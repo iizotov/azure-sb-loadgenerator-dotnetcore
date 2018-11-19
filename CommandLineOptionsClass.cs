@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using CommandLine;
 
 
+
 namespace LoadGeneratorDotnetCore
 {
     enum ServiceEnum { eh, sb };

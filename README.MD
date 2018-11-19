@@ -11,7 +11,7 @@ This .NET Core console app generates random payloads and inserts it into an Azur
 Payload options: 
 * JSON consistsing of a UTC timestamp and a random string payload of an arbitrary length
     ```json
-    {'dt':1542128101310,'payload':'FPBNFAGYABFPWWOAQALJKCIBJIFVAMLXHZO'}
+    {"dt":1542128101310,"payload":"FPBNFAGYABFPWWOAQALJKCIBJIFVAMLXHZO"}
     ```
 * random string of an arbitrary length
     ```

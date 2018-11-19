@@ -56,7 +56,7 @@ namespace LoadGeneratorDotnetCore
                 Interlocked.Exchange(ref _payloadSize, val);
             }
         }
-
+        protected bool dryRun = true;
         protected bool timerStarted = false;
         protected bool generateJsonPayload = false;
         protected int highThreadId = 0;

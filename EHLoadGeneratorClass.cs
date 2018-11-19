@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
+using RateLimiter;
 
 namespace LoadGeneratorDotnetCore
 {
@@ -12,6 +13,7 @@ namespace LoadGeneratorDotnetCore
     {
         private EventHubsConnectionStringBuilder ehConnectionString;
         private string entityPath;
+
         public EHLoadGeneratorClass(
             string connectionString, string entityPath,
             int payloadSize, bool generateJsonPayload,
@@ -40,6 +42,7 @@ namespace LoadGeneratorDotnetCore
         }
         public override void GenerateWorkload(Guid threadId, CancellationToken cancellationToken)
         {
+            //??? IRateLimiter rateLimiter = RateLimiter.RateLimiter.Create(5000, TimeSpan.FromSeconds(5), new Sys);
             Int64 queuedMessageCount = 0;
             List<EventData> batchOfMessages = new List<EventData>();
             DateTime timerStart;
@@ -54,21 +57,25 @@ namespace LoadGeneratorDotnetCore
                     // Check if batch is ready to send, also checking if it's the final batch
                     if (queuedMessageCount % batchSize == 0 && queuedMessageCount > 0)
                     {
-                        
-                        sendClient.SendAsync(batchOfMessages)
-                        .ContinueWith((t) =>
+                        if (!this.dryRun)
+                        {
+                            sendClient.SendAsync(batchOfMessages)
+                            .ContinueWith((t) =>
+                            {
+                                messagesSentByThread[threadId] += batchSize;
+                                bytesSentByThread[threadId] = 0;
+                                // just a stub for now, next version of the Event Hub SDK will include AMQP size
+
+                            }, TaskContinuationOptions.OnlyOnRanToCompletion);
+                        }
+                        else
                         {
                             messagesSentByThread[threadId] += batchSize;
                             bytesSentByThread[threadId] = 0;
-                            // just a stub for now, next version of the Event Hub SDK will include AMQP size
-
-                        }, TaskContinuationOptions.OnlyOnRanToCompletion);
-                        // messagesSentByThread[threadId] = queuedMessageCount;
-                        // bytesSentByThread[threadId] = 0;
+                        }
                         batchOfMessages.Clear();
                     }
                     queuedMessageCount++;
-                    // just a stub for now, next version of the Event Hub SDK will include AMQP size
                 }
                 cancellationToken.ThrowIfCancellationRequested();
             }

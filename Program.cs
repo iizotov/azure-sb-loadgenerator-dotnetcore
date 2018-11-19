@@ -87,16 +87,16 @@ namespace LoadGeneratorDotnetCore
                             case ConsoleKey.A:
                                 loadOrchestrator.SetTargetThreadCount(loadOrchestrator.GetTargetThreadCount() - 1);
                                 break;
-                            case ConsoleKey.W:
+                            case ConsoleKey.E:
                                 loadOrchestrator.SetBatchSize(loadOrchestrator.GetBatchSize() + 10);
                                 break;
-                            case ConsoleKey.S:
+                            case ConsoleKey.D:
                                 loadOrchestrator.SetBatchSize(loadOrchestrator.GetBatchSize() - 10);
                                 break;
-                            case ConsoleKey.E:
+                            case ConsoleKey.W:
                                 loadOrchestrator.SetPayloadSize(loadOrchestrator.GetPayloadSize() + 10);
                                 break;
-                            case ConsoleKey.D:
+                            case ConsoleKey.S:
                                 loadOrchestrator.SetPayloadSize(loadOrchestrator.GetPayloadSize() - 10);
                                 break;
                         }
