@@ -1,11 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Concurrent;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
-using RateLimiter;
 
 namespace LoadGeneratorDotnetCore
 {
@@ -13,17 +10,15 @@ namespace LoadGeneratorDotnetCore
     {
         private EventHubsConnectionStringBuilder ehConnectionString;
         private string entityPath;
-
+        private EventHubClient sendClient;
         public EHLoadGeneratorClass(
-            string connectionString, string entityPath,
-            int payloadSize, bool generateJsonPayload,
-            int batchSize) : base(connectionString, batchSize, payloadSize, generateJsonPayload)
+            string connectionString, string entityPath) : base(connectionString)
         {
             this.entityPath = entityPath;
 
             try
             {
-                ehConnectionString = new EventHubsConnectionStringBuilder(connectionString);
+                this.ehConnectionString = new EventHubsConnectionStringBuilder(base.connectionString);
             }
             catch (Exception e)
             {
@@ -31,61 +26,37 @@ namespace LoadGeneratorDotnetCore
             }
             // Successfully parsed the supplied connection string but need to ensure that for Event Hubs either
             // ...;EntityPath=... exists either in the conn string or in executionOptions
-            if (String.IsNullOrWhiteSpace(ehConnectionString.EntityPath))
+            if (String.IsNullOrWhiteSpace(this.ehConnectionString.EntityPath))
             {
                 if (String.IsNullOrWhiteSpace(entityPath))
                 {
                     throw new Exception("Please specify event hub name");
                 }
-                ehConnectionString.EntityPath = entityPath;
+                this.ehConnectionString.EntityPath = entityPath;
             }
+            this.sendClient = EventHubClient.CreateFromConnectionString(ehConnectionString.ToString());
+            this.sendClient.RetryPolicy = RetryPolicy.NoRetry;
         }
-        public override void GenerateWorkload(Guid threadId, CancellationToken cancellationToken)
+        public override Task GenerateBatchAndSend(int batchSize, bool dryRun, CancellationToken cancellationToken, Func<byte[]> loadGenerator)
         {
-            //??? IRateLimiter rateLimiter = RateLimiter.RateLimiter.Create(5000, TimeSpan.FromSeconds(5), new Sys);
-            Int64 queuedMessageCount = 0;
             List<EventData> batchOfMessages = new List<EventData>();
-            DateTime timerStart;
-            EventHubClient sendClient = EventHubClient.CreateFromConnectionString(ehConnectionString.ToString());
-            try
+            for (int i = 0; i < batchSize && !cancellationToken.IsCancellationRequested; i++)
             {
-                timerStart = DateTime.Now;
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    EventData randomPayload = new EventData(GeneratePayload());
-                    batchOfMessages.Add(randomPayload);
-                    // Check if batch is ready to send, also checking if it's the final batch
-                    if (queuedMessageCount % batchSize == 0 && queuedMessageCount > 0)
-                    {
-                        if (!this.dryRun)
-                        {
-                            sendClient.SendAsync(batchOfMessages)
-                            .ContinueWith((t) =>
-                            {
-                                messagesSentByThread[threadId] += batchSize;
-                                bytesSentByThread[threadId] = 0;
-                                // just a stub for now, next version of the Event Hub SDK will include AMQP size
-
-                            }, TaskContinuationOptions.OnlyOnRanToCompletion);
-                        }
-                        else
-                        {
-                            messagesSentByThread[threadId] += batchSize;
-                            bytesSentByThread[threadId] = 0;
-                        }
-                        batchOfMessages.Clear();
-                    }
-                    queuedMessageCount++;
-                }
-                cancellationToken.ThrowIfCancellationRequested();
+                batchOfMessages.Add(new EventData(loadGenerator()));
             }
-            catch (Exception e)
+            if (cancellationToken.IsCancellationRequested)
             {
-                throw e;
+                var tcs = new TaskCompletionSource<int>();
+                tcs.TrySetCanceled();
+                return tcs.Task;
             }
-            finally
+            if (!dryRun)
             {
-                sendClient.CloseAsync();
+                return this.sendClient.SendAsync(batchOfMessages);
+            }
+            else
+            {
+                return Task.CompletedTask;
             }
         }
     }

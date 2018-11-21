@@ -1,16 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using CommandLine;
-using Microsoft.Azure.ServiceBus;
-using Microsoft.Azure.EventHubs;
-
-/*
-TODO: add PID controller and ability to specify target rate
-*/
 
 namespace LoadGeneratorDotnetCore
 {
@@ -18,9 +7,12 @@ namespace LoadGeneratorDotnetCore
     {
         public static int Main(string[] args)
         {
-            int exitCode = -1;
+            int exitCode = 0;
             OrchestratorClass loadOrchestrator;
             dynamic loadGeneratee = null;
+            System.Timers.Timer telemetryTimer = new System.Timers.Timer();
+            Func<byte[]> func;
+            DateTime terminationDT = DateTime.MaxValue;
 
             ExecutionOptionsClass executionOptions = new ExecutionOptionsClass();
 
@@ -30,6 +22,12 @@ namespace LoadGeneratorDotnetCore
                     .WithParsed<ExecutionOptionsClass>(parsedOptions =>
                     {
                         executionOptions = parsedOptions;
+                        telemetryTimer = new System.Timers.Timer(executionOptions.Checkpoint);
+                        if (executionOptions.TerminateAfter > 0)
+                        {
+                            terminationDT = DateTime.Now.AddSeconds(executionOptions.TerminateAfter);
+                        }
+
                     })
                     .WithNotParsed<ExecutionOptionsClass>(errors =>
                     {
@@ -45,63 +43,117 @@ namespace LoadGeneratorDotnetCore
                 {
                     case "eh":
                         loadGeneratee = new EHLoadGeneratorClass(
-                            executionOptions.ConnectionString, executionOptions.EntityPath,
-                            executionOptions.MessageSize, executionOptions.GenerateJson,
-                            executionOptions.BatchSize
+                            executionOptions.ConnectionString,
+                            executionOptions.EntityPath
                             );
                         break;
                     case "sb":
                         loadGeneratee = new SBLoadGeneratorClass(
-                            executionOptions.ConnectionString, executionOptions.EntityPath,
-                            executionOptions.MessageSize, executionOptions.GenerateJson,
-                            executionOptions.BatchSize
+                            executionOptions.ConnectionString,
+                            executionOptions.EntityPath
                             );
                         break;
                 }
-                Console.WriteLine(HelperRoutines.GetExecutionSummary(executionOptions, loadGeneratee));
-                loadOrchestrator = new OrchestratorClass(loadGeneratee, executionOptions.Threads, executionOptions.MessagesToSend);
+                func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
+                Console.WriteLine(HelperRoutines.GetExecutionSummary(executionOptions, loadGeneratee, func));
+
+                loadOrchestrator = new OrchestratorClass(
+                    loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
+                    executionOptions.BatchSize, executionOptions.DryRun, func);
+
                 loadOrchestrator.Start();
 
-                var progressTimer = new System.Timers.Timer { Interval = executionOptions.Checkpoint };
-                progressTimer.Elapsed += (sender, e) => { loadOrchestrator.PrintProgress(); };
-                progressTimer.Start();
+                if (executionOptions.Checkpoint > 0)
+                {
+                    telemetryTimer.Elapsed += (sender, e) =>
+                    {
+                        Console.WriteLine(loadOrchestrator.GetStatusSnapshot());
+                    };
+                    telemetryTimer.Start();
+                }
 
                 do
                 {
+                    if (DateTime.Now >= terminationDT)
+                    {
+                        String dt = DateTime.UtcNow.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff");
+                        Console.WriteLine($"[{dt}], terminating after {executionOptions.TerminateAfter} seconds...");
+                        break;
+                    }
                     if (loadOrchestrator.isJobDone)
                     {
-                        progressTimer.Stop();
+                        String dt = DateTime.UtcNow.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff");
+                        Console.WriteLine($"[{dt}] Exiting...");
                         break;
                     }
                     if (Console.KeyAvailable)
                     {
                         var ch = Console.ReadKey(true).Key;
+                        String dt = DateTime.UtcNow.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff");
+
                         switch (ch)
                         {
                             case ConsoleKey.Escape:
-                                loadOrchestrator.SetTargetThreadCount(0);
+                                Console.WriteLine("Exiting...");
+                                loadOrchestrator.Stop();
                                 break;
+
                             case ConsoleKey.Q:
-                                loadOrchestrator.SetTargetThreadCount(loadOrchestrator.GetTargetThreadCount() + 1);
+                                executionOptions.TargetThroughput = executionOptions.TargetThroughput + 10;
+                                Console.WriteLine($"[{dt}] New target throughput: {executionOptions.TargetThroughput} msg/sec");
+
+                                loadOrchestrator.Stop();
+                                loadOrchestrator = null;
+                                func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
+                                loadOrchestrator = new OrchestratorClass(
+                                    loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
+                                    executionOptions.BatchSize, executionOptions.DryRun, func);
+                                loadOrchestrator.Start();
+
                                 break;
                             case ConsoleKey.A:
-                                loadOrchestrator.SetTargetThreadCount(loadOrchestrator.GetTargetThreadCount() - 1);
-                                break;
-                            case ConsoleKey.E:
-                                loadOrchestrator.SetBatchSize(loadOrchestrator.GetBatchSize() + 10);
-                                break;
-                            case ConsoleKey.D:
-                                loadOrchestrator.SetBatchSize(loadOrchestrator.GetBatchSize() - 10);
+                                executionOptions.TargetThroughput = executionOptions.TargetThroughput >= 10 ?
+                                                    executionOptions.TargetThroughput - 10 :
+                                                    0;
+                                Console.WriteLine($"[{dt}] New target throughput: {executionOptions.TargetThroughput} msg/sec");
+
+                                loadOrchestrator.Stop();
+                                loadOrchestrator = null;
+                                func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
+                                loadOrchestrator = new OrchestratorClass(
+                                    loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
+                                    executionOptions.BatchSize, executionOptions.DryRun, func);
+                                loadOrchestrator.Start();
+
                                 break;
                             case ConsoleKey.W:
-                                loadOrchestrator.SetPayloadSize(loadOrchestrator.GetPayloadSize() + 10);
+                                executionOptions.BatchSize = executionOptions.BatchSize + 10;
+                                Console.WriteLine($"[{dt}] New batch size: {executionOptions.BatchSize}");
+
+                                loadOrchestrator.Stop();
+                                loadOrchestrator = null;
+                                func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
+                                loadOrchestrator = new OrchestratorClass(
+                                    loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
+                                    executionOptions.BatchSize, executionOptions.DryRun, func);
+                                loadOrchestrator.Start();
                                 break;
                             case ConsoleKey.S:
-                                loadOrchestrator.SetPayloadSize(loadOrchestrator.GetPayloadSize() - 10);
+                                executionOptions.BatchSize = executionOptions.BatchSize > 10 ?
+                                                        executionOptions.BatchSize - 10 :
+                                                        1;
+                                Console.WriteLine($"[{dt}] New batch size: {executionOptions.BatchSize}");
+
+                                loadOrchestrator.Stop();
+                                loadOrchestrator = null;
+                                func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
+                                loadOrchestrator = new OrchestratorClass(
+                                    loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
+                                    executionOptions.BatchSize, executionOptions.DryRun, func);
+                                loadOrchestrator.Start();
                                 break;
                         }
                     }
-                    Thread.Sleep(300);
                     // sit and relax
                 } while (true);
             }
@@ -114,6 +166,10 @@ namespace LoadGeneratorDotnetCore
             }
             finally
             {
+                if (telemetryTimer.Enabled)
+                {
+                    telemetryTimer.Stop();
+                }
                 Console.WriteLine();
                 Console.WriteLine($"Execution completed, exit code {exitCode}");
             }

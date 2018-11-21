@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Concurrent;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.ServiceBus;
@@ -12,15 +10,15 @@ namespace LoadGeneratorDotnetCore
     {
         private ServiceBusConnectionStringBuilder sbConnectionString;
         private string entityPath;
+        private QueueClient sendClient;
         public SBLoadGeneratorClass(
-            string connectionString, string entityPath,
-            int payloadSize, bool generateJsonPayload,
-            int batchSize) : base(connectionString, batchSize, payloadSize, generateJsonPayload)
+            string connectionString, string entityPath) : base(connectionString)
         {
             this.entityPath = entityPath;
+
             try
             {
-                sbConnectionString = new ServiceBusConnectionStringBuilder(connectionString);
+                this.sbConnectionString = new ServiceBusConnectionStringBuilder(connectionString);
             }
             catch (Exception e)
             {
@@ -34,46 +32,32 @@ namespace LoadGeneratorDotnetCore
                 {
                     throw new Exception("Please specify event hub name");
                 }
-                sbConnectionString.EntityPath = entityPath;
+                this.sbConnectionString.EntityPath = entityPath;
             }
+            this.sendClient = new QueueClient(sbConnectionString, retryPolicy: RetryPolicy.NoRetry);
+            // this.sendClient = new QueueClient(sbConnectionString);
         }
-        public override void GenerateWorkload(Guid threadId, CancellationToken cancellationToken)
-        {
-            Int64 queuedMessageCount = 0;
-            List<Message> batchOfMessages = new List<Message>();
-            DateTime timerStart;
-            QueueClient sendClient = new QueueClient(sbConnectionString);
-            try
-            {
-                timerStart = DateTime.Now;
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    Message randomPayload = new Message(GeneratePayload());
-                    batchOfMessages.Add(randomPayload);
-                    // Check if batch is ready to send, also checking if it's the final batch
-                    if (queuedMessageCount % batchSize == 0 && queuedMessageCount > 0)
-                    {
-                        sendClient.SendAsync(batchOfMessages)
-                        .ContinueWith((t) =>
-                        {
-                            messagesSentByThread[threadId] += batchSize;
-                            bytesSentByThread[threadId] = 0;
-                            // just a stub for now, next version of the Event Hub SDK will include AMQP size
 
-                        }, TaskContinuationOptions.OnlyOnRanToCompletion);
-                        batchOfMessages.Clear();
-                    }
-                    queuedMessageCount++;
-                }
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-            catch (Exception e)
+        public override Task GenerateBatchAndSend(int batchSize, bool dryRun, CancellationToken cancellationToken, Func<byte[]> loadGenerator)
+        {
+            List<Message> batchOfMessages = new List<Message>();
+            for (int i = 0; i < batchSize && !cancellationToken.IsCancellationRequested; i++)
             {
-                throw e;
+                batchOfMessages.Add(new Message(loadGenerator()));
             }
-            finally
+            if (cancellationToken.IsCancellationRequested)
             {
-                sendClient.CloseAsync();
+                var tcs = new TaskCompletionSource<int>();
+                tcs.TrySetCanceled();
+                return tcs.Task;
+            }
+            if (!dryRun)
+            {
+                return this.sendClient.SendAsync(batchOfMessages);
+            }
+            else
+            {
+                return Task.CompletedTask;
             }
         }
     }

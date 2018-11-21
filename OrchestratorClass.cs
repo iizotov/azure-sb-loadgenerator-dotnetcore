@@ -1,148 +1,176 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
-using System.Collections.Concurrent;
-using System.Linq;
 using System.Threading;
-
-
-
-// TODO: modify protection of members
-// TODO: introduce LINQ
+using RateLimiter;
+using System.Text;
 
 namespace LoadGeneratorDotnetCore
 {
     class OrchestratorClass
     {
-        public bool isJobDone { get; set; } = false;
-        private const int CONTROL_LOOP_INTERVAL_MS = 300;
-        private const int MAX_THREADS = 100;
-        private dynamic loadGeneratee;
-        private System.Timers.Timer timer;
-        private int targetThreadCount = 1;
-        private Int64 targetMessageCount = 0;
+        private System.Timers.Timer statisticsTimer = new System.Timers.Timer(100);
+        private DateTime processStartTS;
+        private bool isRunning = false;
         protected readonly object sharedLock = new object();
-        private ConcurrentBag<Tuple<Task, CancellationTokenSource>> taskCollection = new ConcurrentBag<Tuple<Task, CancellationTokenSource>>();
-        private int cursorTop = -1;
-
-        public OrchestratorClass(dynamic loadGeneratee, int targetThreadCount, Int64 targetMessageCount)
+        private dynamic loadGeneratee;
+        private int targetThroughput;
+        private Int64 targetMessageCount;
+        private Int64 totalMessageCount;
+        private double longAverageThroughput = 0.0;
+        private double shortAverageThroughput = 0.0;
+        private int batchSize;
+        private bool dryRun;
+        public bool isJobDone = false;
+        private CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+        private Func<byte[]> DataGenerator;
+        private MovingAverageClass movingAverage = new MovingAverageClass(500); // moving window across 500 data points
+        private int messageSize;
+        private TimeLimiter throttler;
+        public OrchestratorClass(dynamic loadGeneratee, int targetMessagesPerSecond, Int64 targetMessageCount, int batchSize, bool dryRun, Func<byte[]> DataGenerator)
         {
             this.loadGeneratee = loadGeneratee;
-            this.timer = new System.Timers.Timer { Interval = CONTROL_LOOP_INTERVAL_MS };
             this.targetMessageCount = targetMessageCount;
-            SetTargetThreadCount(targetThreadCount);
+            this.targetThroughput = targetMessagesPerSecond;
+            this.batchSize = batchSize;
+            this.dryRun = dryRun;
+            this.DataGenerator = DataGenerator;
+            this.messageSize = DataGenerator().Length;
         }
-
-        public void PrintProgress()
+        private void UpdateStatistics()
         {
-            if(this.cursorTop < 0)
-            {
-                this.cursorTop = Console.CursorTop;
-                // TODO: not thread-safe
-            }
-            StringBuilder sb = new StringBuilder();
-            sb.AppendLine($"Target threads: {GetTargetThreadCount()} Active threads: {GetActiveThreadCount()}");
-            sb.AppendLine($"Batch size: {loadGeneratee.GetBatchSize()} payload size: {loadGeneratee.GetPayloadSize()} bytes");
-
-            foreach (var taskTuple in taskCollection)
-            {
-                Guid threadId = (Guid)taskTuple.Item1.AsyncState;
-                sb.AppendLine($"Thread {threadId} is {taskTuple.Item1.Status}, sent {loadGeneratee.GetThreadMessageCount(threadId)} msgs, avg speed: {loadGeneratee.GetAverageThreadThroughputMPS(threadId):0.#} msg/sec");
-            }
-            sb.AppendLine($"Sent: {loadGeneratee.GetTotalMessageCount()} msgs, avg speed: {loadGeneratee.GetAverageThroughputMPS():0.#} msg/sec");
-            sb.AppendLine("");
-            Console.Write(sb.ToString());
-            try
-            {
-                Console.CursorTop = this.cursorTop;
-                Console.CursorLeft = 0;
-            }
-            catch{}
+            Interlocked.Exchange(ref this.longAverageThroughput, (double)this.totalMessageCount / (DateTime.Now - this.processStartTS).TotalMilliseconds * 1000.0);
+            Interlocked.Exchange(ref this.shortAverageThroughput, this.movingAverage.AddCumulativeSample(this.totalMessageCount));
         }
+        private void SetThrottler()
+        {
+            if (this.targetThroughput > 0)
+            {
+                // 25% extra for overhead - maybe, need a more scientific way to calc, 0% for now 
+                double overheadCompensator = this.dryRun ? 1.0 : 1.0;
 
+                double controlInterval = 1.0; // seconds
+
+                // how many invokations per second are allowed
+                double invocationsPerControlInterval = (double)(this.targetThroughput * overheadCompensator) / (double)this.batchSize * controlInterval ; 
+
+                double clampBelowInterval = controlInterval / invocationsPerControlInterval * 1000.0;
+
+                // renormalise to avoid fractional invocations
+                if (invocationsPerControlInterval < 100)
+                {
+                    double normaliser = 100.0 / invocationsPerControlInterval;
+                    invocationsPerControlInterval = normaliser * invocationsPerControlInterval;
+                    controlInterval = normaliser * controlInterval;
+                }
+
+                // does not make sence to clamp from below at < 15ms - timers aren't that precise
+                if (clampBelowInterval < 15.0)
+                {
+                    this.throttler = TimeLimiter.GetFromMaxCountByInterval(Convert.ToInt32(invocationsPerControlInterval), TimeSpan.FromSeconds(controlInterval));
+                }
+                else
+                {
+                    var clampAbove = new CountByIntervalAwaitableConstraint(Convert.ToInt32(invocationsPerControlInterval), TimeSpan.FromSeconds(controlInterval));
+                    // Clamp from below: e.g. one invocation every 100 ms
+                    var clampBelow = new CountByIntervalAwaitableConstraint(1, TimeSpan.FromMilliseconds(clampBelowInterval));
+                    //Compose the two constraints
+                    this.throttler = TimeLimiter.Compose(clampAbove, clampBelow);
+                }
+            }
+            else // no throttling
+            {
+                this.throttler = TimeLimiter.GetFromMaxCountByInterval(Int32.MaxValue, TimeSpan.FromMilliseconds(1));
+            }
+        }
+        public string GetStatusSnapshot()
+        {
+            String dt = DateTime.UtcNow.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff");
+            StringBuilder sb = new StringBuilder();
+
+            sb.AppendLine($"[{dt}] Target: throughput {this.targetThroughput} msg/sec, volume: {this.targetMessageCount}, batch size: {this.batchSize}, msg size: {this.messageSize}");
+            sb.AppendLine($"[{dt}] Stats: {this.totalMessageCount} msg sent, long avg {this.longAverageThroughput:0.#} msg/sec, short avg {this.shortAverageThroughput:0.#} msg/sec");
+            return sb.ToString();
+        }
+        // Kicks off the main loop
         public void Start()
         {
-            timer.Elapsed += (sender, e) =>
+            Task task = new Task(
+                () => this._Start()
+            );
+            task.Start();
+        }
+
+        // The main loop
+        private void _Start()
+        {
+            // ensure only one instance is running
+            if (this.isRunning)
             {
-                ControlLoop();
-            };
-            timer.Start();
-        }
-
-        public void Stop()
-        {
-            SetTargetThreadCount(0);
-        }
-
-        public int GetActiveThreadCount()
-        {
-            return taskCollection.Where(t => t.Item1.IsCompleted == false).Count();
-        }
-        public int GetTargetThreadCount()
-        {
-            return targetThreadCount;
-        }
-        public void SetTargetThreadCount(int targetThreadCount)
-        {
-            this.targetThreadCount = targetThreadCount >= 0 ? Math.Min(targetThreadCount, MAX_THREADS) : 0;
-        }
-        public int GetBatchSize()
-        {
-            return loadGeneratee.GetBatchSize();
-        }
-        public void SetBatchSize(int batchSize)
-        {
-            loadGeneratee.SetBatchSize(batchSize);
-        }
-        public int GetPayloadSize()
-        {
-            return loadGeneratee.GetPayloadSize();
-        }
-        public void SetPayloadSize(int payloadSize)
-        {
-            loadGeneratee.SetPayloadSize(payloadSize);
-        }
-        private void ControlLoop()
-        {
-            // lock (sharedLock)
+                return;
+            }
+            lock (this.sharedLock)
             {
-                if (GetActiveThreadCount() < GetTargetThreadCount())
+                this.isRunning = true;
+                this.processStartTS = DateTime.Now;
+                this.SetThrottler();
+                this.statisticsTimer.Elapsed += (sender, e) =>
                 {
-                    CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-                    CancellationToken cancellationToken = cancellationTokenSource.Token;
+                    this.UpdateStatistics();
+                };
+                this.statisticsTimer.Start();
+            }
 
-                    Task task = Task.Factory
-                        .StartNew(
-                            (Object g) =>
-                            {
-                                loadGeneratee.StartThread((Guid)g, cancellationToken);
-                            },
-                            Guid.NewGuid(),
-                            cancellationToken,
-                            TaskCreationOptions.LongRunning,
-                            TaskScheduler.Default);
+            // Keep running until:
+            // a. shared cancellation token is triggered
+            // b. we've emitted the required quantity of messages
+            // Keep running forever otherwise           
+            while (this.totalMessageCount < this.targetMessageCount ||
+                    this.targetMessageCount <= 0)
+            {
+                Task task;
 
-                    taskCollection.Add(new Tuple<Task, CancellationTokenSource>(task, cancellationTokenSource));
+                if (this.targetThroughput <= 0) // unconstrained
+                {
+                    task = this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, this.cancellationTokenSource.Token, this.DataGenerator);
+                }
+                else
+                {
+
+                    task = this.throttler.Perform(() =>
+                    {
+                        this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, this.cancellationTokenSource.Token, this.DataGenerator);
+                    });
                 }
 
-                if (GetActiveThreadCount() > GetTargetThreadCount())
+                task.ContinueWith((taskResult) =>
                 {
-                    CancellationTokenSource cancellationTokenSource = taskCollection.First(t => t.Item1.IsCompleted == false).Item2;
-                    cancellationTokenSource.Cancel();
-                }
+                    Int64 total = Interlocked.Add(ref this.totalMessageCount, this.batchSize);
 
-                if (targetMessageCount > 0 && targetMessageCount > loadGeneratee.GetTotalMessageCount())
-                {
-                    SetTargetThreadCount(0);
-                }
+                }, TaskContinuationOptions.OnlyOnRanToCompletion);
 
-                if (GetActiveThreadCount() == 0 && GetTargetThreadCount() == 0)
+                if (this.cancellationTokenSource.IsCancellationRequested)
                 {
-                    isJobDone = true;
-                    timer.Stop();
+                    break;
                 }
             }
+
+            // Clean up
+            lock (this.sharedLock)
+            {
+                this.isRunning = false;
+                this.isJobDone = true;
+                this.statisticsTimer.Stop();
+            }
+        }
+        public void Stop()
+        {
+            this.cancellationTokenSource.Cancel();
+        }
+
+        public void Restart()
+        {
+            this.Stop();
+            this.Start();
         }
     }
 
