@@ -117,19 +117,17 @@ Press Escape to cancel all threads and gracefully exit
 ### Notes re capping throughput
 The target throughput setting uses the call rate limiting approach and is particularly accurate with small batch size (1..5). It's great for 'warming up' the system for testing before removing all rate limiters. Smaller batch size is likely going to saturate your CPU first. Overall, the algorithm is pretty efficient and can push out 20k msg/sec in 100-message batches on a single-CPU machine.
 
-A simple script that runs a 5-minute warm-up cycle at 1000 msg/sec before unleashing an uncapped load at 100 messages/batch :
+A simple script that runs a 5-minute warm-up cycle at 100 msg/sec before removing the throughput cap and sending through 100-message batches:
 
 ```bash
 #!/bin/bash
 
-CONNECTION_STRING="sb://...."
+CONNECTION_STRING="Endpoint=sb://.....;TransportType=Amqp;"
+ENTITY_NAME="...."
 
-wget https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/releases/download/release-2.0.0/azure-sb-loadgenerator-dotnetcore.tar.gz
-tar -xvzf azure-sb-loadgenerator-dotnetcore.tar.gz
-cd ./azure-sb-loadgenerator-dotnetcore/
+dotnet loadgenerator.dll -c $CONNECTION_STRING -t 100 --terminate-after 300 -b 1 -n $ENTITY_NAME
+dotnet loadgenerator.dll -c $CONNECTION_STRING -t 0 -b 100 -n $ENTITY_NAME
 
-dotnet loadgenerator.dll -c $CONNECTION_STRING -t 1000 --terminate-after 300 -b 1
-dotnet loadgenerator.dll -c $CONNECTION_STRING -t 0 -b 100
 ```
 
 ## Disclaimers
