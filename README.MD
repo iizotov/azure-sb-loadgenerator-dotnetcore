@@ -19,18 +19,20 @@ Payload options:
 > Note: it is recommended to append `;TransportType=Amqp` to your connection string to enforce [AMQP](https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-amqp-dotnet) for better performance
 
 **Software prerequisites:**
-1. [.NET Core 2.1+](https://www.microsoft.com/net/download)
-2. (Optional) [Visual Studio Code](https://code.visualstudio.com/)
+1. [.NET Core Runtime 2.1+](https://www.microsoft.com/net/download)
+2. (Optional) [Visual Studio Code](https://code.visualstudio.com/) and [.NET Core SDK 2.1+](https://www.microsoft.com/net/download) if you wish to build from source
 
 ## Running this sample
-1. Clone this repository or download the zip file.
-2. Open the folder and run `dotnet run <arguments>`
+1. Download the [latest release](https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/releases/latest).
+2. Unpack, `cd` to the folder, run `dotnet loadgenerator.dll <parameters>`
 
-    ```bash
-    git clone https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/
-    cd ./azure-sb-loadgenerator-dotnetcore/
-    dotnet run <parameters>
-    ```
+Example:
+```bash
+wget https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/releases/download/release-2.0.0/azure-sb-loadgenerator-dotnetcore.tar.gz
+tar -xvzf azure-sb-loadgenerator-dotnetcore.tar.gz
+cd ./azure-sb-loadgenerator-dotnetcore/
+dotnet loadgenerator.dll <parameters>
+```
    
 ### Command Line Parameters
 ```
@@ -74,7 +76,7 @@ Payload options:
 The following command will generate uncapped load in batches of 100 json messages, each message with a payload of 35 random characters. The code will run infitinely until a SIGTERM / SIGKILL is received or Escape is hit. Some parameters can be interactively adjusted in-flight
 
 ```
-dotnet run --service "eh" --connectionstring "Endpoint=sb://eh-af-perftest.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=****;TransportType=Amqp;" --name "eh-ah-perftest-32"
+dotnet loadgenerator.dll --service "eh" --connectionstring "Endpoint=sb://eh-af-perftest.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=****;TransportType=Amqp;" --name "eh-ah-perftest-32"
 
 -----INITIAL PARAMETERS-----
 Execution started: 21/11/2018 5:38:16 AM
@@ -120,12 +122,15 @@ A simple script that runs a 5-minute warm-up cycle at 1000 msg/sec before unleas
 ```bash
 #!/bin/bash
 
-git clone https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/
-cd ./azure-sb-loadgenerator-dotnetcore/
-dotnet run -c <connection_string> -t 1000 --terminate-after 300 -b 1
-dotnet run -c <connection_string> -t 0 -b 100
-```
+CONNECTION_STRING="sb://...."
 
+wget https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/releases/download/release-2.0.0/azure-sb-loadgenerator-dotnetcore.tar.gz
+tar -xvzf azure-sb-loadgenerator-dotnetcore.tar.gz
+cd ./azure-sb-loadgenerator-dotnetcore/
+
+dotnet loadgenerator.dll -c $CONNECTION_STRING -t 1000 --terminate-after 300 -b 1
+dotnet loadgenerator.dll -c $CONNECTION_STRING -t 0 -b 100
+```
 
 ## Disclaimers
 The code included in this sample is not intended to be a set of best practices on how to build scalable enterprise grade applications. This is beyond the scope of this quick start sample.
