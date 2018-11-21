@@ -28,7 +28,7 @@ Payload options:
 
 Example:
 ```bash
-wget https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/releases/download/2.0.1/azure-sb-loadgenerator-dotnetcore.tar.gz
+wget https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/releases/download/2.0.2/azure-sb-loadgenerator-dotnetcore.tar.gz
 tar -xvzf azure-sb-loadgenerator-dotnetcore.tar.gz
 cd ./azure-sb-loadgenerator-dotnetcore/
 dotnet loadgenerator.dll <parameters>

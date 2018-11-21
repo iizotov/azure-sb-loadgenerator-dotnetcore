@@ -51,7 +51,7 @@ namespace LoadGeneratorDotnetCore
                 double controlInterval = 1.0; // seconds
 
                 // how many invokations per second are allowed
-                double invocationsPerControlInterval = (double)(this.targetThroughput * overheadCompensator) / (double)this.batchSize * controlInterval ; 
+                double invocationsPerControlInterval = (double)(this.targetThroughput * overheadCompensator) / (double)this.batchSize * controlInterval;
 
                 double clampBelowInterval = controlInterval / invocationsPerControlInterval * 1000.0;
 
@@ -94,14 +94,15 @@ namespace LoadGeneratorDotnetCore
         // Kicks off the main loop
         public void Start()
         {
+            CancellationToken cancellationToken = this.cancellationTokenSource.Token;
             Task task = new Task(
-                () => this._Start()
-            );
+                () => this._Start(cancellationToken)
+            , cancellationToken);
             task.Start();
         }
 
         // The main loop
-        private void _Start()
+        private void _Start(CancellationToken cancellationToken)
         {
             // ensure only one instance is running
             if (this.isRunning)
@@ -131,24 +132,22 @@ namespace LoadGeneratorDotnetCore
 
                 if (this.targetThroughput <= 0) // unconstrained
                 {
-                    task = this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, this.cancellationTokenSource.Token, this.DataGenerator);
+                    task = this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
                 }
                 else
                 {
-
                     task = this.throttler.Perform(() =>
                     {
-                        this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, this.cancellationTokenSource.Token, this.DataGenerator);
+                        this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
                     });
                 }
-
                 task.ContinueWith((taskResult) =>
                 {
                     Int64 total = Interlocked.Add(ref this.totalMessageCount, this.batchSize);
 
                 }, TaskContinuationOptions.OnlyOnRanToCompletion);
 
-                if (this.cancellationTokenSource.IsCancellationRequested)
+                if (cancellationToken.IsCancellationRequested)
                 {
                     break;
                 }
@@ -160,17 +159,12 @@ namespace LoadGeneratorDotnetCore
                 this.isRunning = false;
                 this.isJobDone = true;
                 this.statisticsTimer.Stop();
+                cancellationToken.ThrowIfCancellationRequested();
             }
         }
         public void Stop()
         {
             this.cancellationTokenSource.Cancel();
-        }
-
-        public void Restart()
-        {
-            this.Stop();
-            this.Start();
         }
     }
 

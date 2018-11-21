@@ -1,5 +1,6 @@
 ﻿using System;
 using CommandLine;
+using System.Threading;
 
 namespace LoadGeneratorDotnetCore
 {
@@ -77,6 +78,7 @@ namespace LoadGeneratorDotnetCore
                 {
                     if (DateTime.Now >= terminationDT)
                     {
+                        loadOrchestrator.Stop();
                         String dt = DateTime.UtcNow.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff");
                         Console.WriteLine($"[{dt}], terminating after {executionOptions.TerminateAfter} seconds...");
                         break;
@@ -95,7 +97,7 @@ namespace LoadGeneratorDotnetCore
                         switch (ch)
                         {
                             case ConsoleKey.Escape:
-                                Console.WriteLine("Exiting...");
+                                Console.WriteLine($"[{dt}] Exiting...");
                                 loadOrchestrator.Stop();
                                 break;
 
@@ -105,6 +107,8 @@ namespace LoadGeneratorDotnetCore
 
                                 loadOrchestrator.Stop();
                                 loadOrchestrator = null;
+                                GC.Collect();
+
                                 func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
                                 loadOrchestrator = new OrchestratorClass(
                                     loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
@@ -120,6 +124,8 @@ namespace LoadGeneratorDotnetCore
 
                                 loadOrchestrator.Stop();
                                 loadOrchestrator = null;
+                                GC.Collect();
+
                                 func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
                                 loadOrchestrator = new OrchestratorClass(
                                     loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
@@ -133,6 +139,8 @@ namespace LoadGeneratorDotnetCore
 
                                 loadOrchestrator.Stop();
                                 loadOrchestrator = null;
+                                GC.Collect();
+
                                 func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
                                 loadOrchestrator = new OrchestratorClass(
                                     loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
@@ -147,6 +155,8 @@ namespace LoadGeneratorDotnetCore
 
                                 loadOrchestrator.Stop();
                                 loadOrchestrator = null;
+                                GC.Collect();
+
                                 func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
                                 loadOrchestrator = new OrchestratorClass(
                                     loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
@@ -155,6 +165,7 @@ namespace LoadGeneratorDotnetCore
                                 break;
                         }
                     }
+                    Thread.Sleep(300);
                     // sit and relax
                 } while (true);
             }
@@ -171,6 +182,7 @@ namespace LoadGeneratorDotnetCore
                 {
                     telemetryTimer.Stop();
                 }
+                GC.Collect();
                 Console.WriteLine();
                 Console.WriteLine($"Execution completed, exit code {exitCode}");
             }
