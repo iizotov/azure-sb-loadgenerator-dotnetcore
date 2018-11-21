@@ -86,7 +86,7 @@ GenerateJson: True
 DryRun: False
 TerminateAfter: 0
 MessagesToSend: 0
-ConnectionString: Endpoint=sb://eh-af-perftest.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=rff9+PueQT9kqBFu85FzMr61ySqyrm8Lp+8L8+OgLfQ=;TransportType=Amqp;
+ConnectionString: Endpoint=sb://eh-af-perftest.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=***;TransportType=Amqp;
 EntityPath: eh-ah-perftest-32
 Checkpoint: 1000
 TargetThroughput: 100
