@@ -7,6 +7,7 @@ namespace LoadGeneratorDotnetCore
     {
         public static int Main(string[] args)
         {
+            bool isConsoleRedirected = Console.IsInputRedirected || Console.IsErrorRedirected || Console.IsOutputRedirected;
             int exitCode = 0;
             OrchestratorClass loadOrchestrator;
             dynamic loadGeneratee = null;
@@ -86,7 +87,7 @@ namespace LoadGeneratorDotnetCore
                         Console.WriteLine($"[{dt}] Exiting...");
                         break;
                     }
-                    if (Console.KeyAvailable)
+                    if (!isConsoleRedirected && Console.KeyAvailable)
                     {
                         var ch = Console.ReadKey(true).Key;
                         String dt = DateTime.UtcNow.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff");
