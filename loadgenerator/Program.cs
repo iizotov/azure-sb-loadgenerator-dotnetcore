@@ -152,7 +152,7 @@ namespace LoadGeneratorDotnetCore
                                 break;
                         }
                     }
-                    Thread.Sleep(300);
+                    // Thread.Sleep(300);
                     // sit and relax
                 } while (true);
             }

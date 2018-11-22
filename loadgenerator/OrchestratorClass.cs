@@ -79,7 +79,7 @@ namespace LoadGeneratorDotnetCore
             }
             else // no throttling
             {
-                this.throttler = TimeLimiter.GetFromMaxCountByInterval(Int32.MaxValue, TimeSpan.FromMilliseconds(1));
+                this.throttler = TimeLimiter.GetFromMaxCountByInterval(Int32.MaxValue, TimeSpan.FromSeconds(1));
             }
         }
         public string GetStatusSnapshot()
@@ -95,14 +95,15 @@ namespace LoadGeneratorDotnetCore
         public void Start()
         {
             CancellationToken cancellationToken = this.cancellationTokenSource.Token;
-            Task task = new Task(
-                () => this._Start(cancellationToken)
-            , cancellationToken, TaskCreationOptions.DenyChildAttach);
-            task.Start(TaskScheduler.Default);
+            this._Start(cancellationToken);
+            // Task task = new Task(
+            // () => this._Start(cancellationToken)
+            // , cancellationToken, TaskCreationOptions.DenyChildAttach);
+            // task.Start(TaskScheduler.Default);
         }
 
         // The main loop
-        private void _Start(CancellationToken cancellationToken)
+        private async void _Start(CancellationToken cancellationToken)
         {
             // ensure only one instance is running
             if (this.isRunning)
@@ -128,28 +129,39 @@ namespace LoadGeneratorDotnetCore
             while (this.totalMessageCount < this.targetMessageCount ||
                     this.targetMessageCount <= 0)
             {
-                Task task;
-
-                if (this.targetThroughput <= 0) // unconstrained
-                {
-                    task = this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
-                }
-                else
-                {
-                    task = this.throttler.Perform(() =>
-                    {
-                        this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
-                    });
-                }
-                task.ContinueWith((taskResult) =>
-                {
-                    Int64 total = Interlocked.Add(ref this.totalMessageCount, this.batchSize);
-
-                }, TaskContinuationOptions.OnlyOnRanToCompletion);
-
                 if (cancellationToken.IsCancellationRequested)
                 {
                     break;
+                }
+
+                if (this.targetThroughput <= 0) // unconstrained
+                {
+                    // loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                    // Interlocked.Add(ref this.totalMessageCount, this.batchSize);
+                    // await this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                    // Interlocked.Add(ref this.totalMessageCount, this.batchSize);
+                    // BUG HERE - thread starvation
+                    try
+                    {
+                        await this.throttler.Perform(() =>
+                        {
+                            this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                        }, cancellationToken);
+                        Interlocked.Add(ref this.totalMessageCount, this.batchSize);
+                    }
+                    catch { } // swallow all exceptions
+                }
+                else
+                {
+                    try
+                    {
+                        await this.throttler.Perform(() =>
+                        {
+                            this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                        }, cancellationToken);
+                        Interlocked.Add(ref this.totalMessageCount, this.batchSize);
+                    }
+                    catch { } // swallow all exceptions
                 }
             }
 
@@ -159,7 +171,6 @@ namespace LoadGeneratorDotnetCore
                 this.isRunning = false;
                 this.isJobDone = true;
                 this.statisticsTimer.Stop();
-                cancellationToken.ThrowIfCancellationRequested();
             }
         }
         public void Stop()
