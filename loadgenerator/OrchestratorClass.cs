@@ -97,8 +97,8 @@ namespace LoadGeneratorDotnetCore
             CancellationToken cancellationToken = this.cancellationTokenSource.Token;
             Task task = new Task(
                 () => this._Start(cancellationToken)
-            , cancellationToken);
-            task.Start();
+            , cancellationToken, TaskCreationOptions.DenyChildAttach);
+            task.Start(TaskScheduler.Default);
         }
 
         // The main loop

@@ -106,9 +106,6 @@ namespace LoadGeneratorDotnetCore
                                 Console.WriteLine($"[{dt}] New target throughput: {executionOptions.TargetThroughput} msg/sec");
 
                                 loadOrchestrator.Stop();
-                                loadOrchestrator = null;
-                                GC.Collect();
-
                                 func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
                                 loadOrchestrator = new OrchestratorClass(
                                     loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
@@ -123,9 +120,6 @@ namespace LoadGeneratorDotnetCore
                                 Console.WriteLine($"[{dt}] New target throughput: {executionOptions.TargetThroughput} msg/sec");
 
                                 loadOrchestrator.Stop();
-                                loadOrchestrator = null;
-                                GC.Collect();
-
                                 func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
                                 loadOrchestrator = new OrchestratorClass(
                                     loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
@@ -138,9 +132,6 @@ namespace LoadGeneratorDotnetCore
                                 Console.WriteLine($"[{dt}] New batch size: {executionOptions.BatchSize}");
 
                                 loadOrchestrator.Stop();
-                                loadOrchestrator = null;
-                                GC.Collect();
-
                                 func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
                                 loadOrchestrator = new OrchestratorClass(
                                     loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
@@ -152,11 +143,7 @@ namespace LoadGeneratorDotnetCore
                                                         executionOptions.BatchSize - 10 :
                                                         1;
                                 Console.WriteLine($"[{dt}] New batch size: {executionOptions.BatchSize}");
-
                                 loadOrchestrator.Stop();
-                                loadOrchestrator = null;
-                                GC.Collect();
-
                                 func = () => { return loadGeneratee.GeneratePayload(executionOptions.GenerateJson, executionOptions.MessageSize); };
                                 loadOrchestrator = new OrchestratorClass(
                                     loadGeneratee, executionOptions.TargetThroughput, executionOptions.MessagesToSend,
@@ -182,7 +169,6 @@ namespace LoadGeneratorDotnetCore
                 {
                     telemetryTimer.Stop();
                 }
-                GC.Collect();
                 Console.WriteLine();
                 Console.WriteLine($"Execution completed, exit code {exitCode}");
             }
