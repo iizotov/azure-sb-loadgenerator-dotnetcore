@@ -35,7 +35,7 @@ namespace LoadGeneratorDotnetCore
                 this.ehConnectionString.EntityPath = entityPath;
             }
             this.sendClient = EventHubClient.CreateFromConnectionString(ehConnectionString.ToString());
-            this.sendClient.RetryPolicy = RetryPolicy.NoRetry;
+            this.sendClient.RetryPolicy = RetryPolicy.Default;
         }
         public override Task GenerateBatchAndSend(int batchSize, bool dryRun, CancellationToken cancellationToken, Func<byte[]> loadGenerator)
         {

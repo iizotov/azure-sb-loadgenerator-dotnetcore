@@ -95,11 +95,11 @@ namespace LoadGeneratorDotnetCore
         public void Start()
         {
             CancellationToken cancellationToken = this.cancellationTokenSource.Token;
-            this._Start(cancellationToken);
-            // Task task = new Task(
-            // () => this._Start(cancellationToken)
-            // , cancellationToken, TaskCreationOptions.DenyChildAttach);
-            // task.Start(TaskScheduler.Default);
+            // this._Start(cancellationToken);
+            Task task = new Task(
+            () => this._Start(cancellationToken)
+            , cancellationToken, TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning);
+            task.Start(TaskScheduler.Default);
         }
 
         // The main loop
@@ -136,30 +136,23 @@ namespace LoadGeneratorDotnetCore
 
                 if (this.targetThroughput <= 0) // unconstrained
                 {
-                    // loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
-                    // Interlocked.Add(ref this.totalMessageCount, this.batchSize);
-                    // await this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
-                    // Interlocked.Add(ref this.totalMessageCount, this.batchSize);
-                    // BUG HERE - thread starvation
                     try
                     {
-                        await this.throttler.Perform(() =>
-                        {
-                            this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
-                        }, cancellationToken);
+                        // TODO: understand if exceptions propagate - looks like the counter is incremented regardless!
+                        await this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
                         Interlocked.Add(ref this.totalMessageCount, this.batchSize);
                     }
                     catch { } // swallow all exceptions
                 }
-                else
+                else // constrained version
                 {
                     try
                     {
-                        await this.throttler.Perform(() =>
+                        await this.throttler.Perform(async () =>
                         {
-                            this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                            await this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                            Interlocked.Add(ref this.totalMessageCount, this.batchSize);
                         }, cancellationToken);
-                        Interlocked.Add(ref this.totalMessageCount, this.batchSize);
                     }
                     catch { } // swallow all exceptions
                 }
