@@ -53,6 +53,7 @@ namespace LoadGeneratorDotnetCore
             if (!dryRun)
             {
                 return this.sendClient.SendAsync(batchOfMessages);
+                // return Task.CompletedTask;
             }
             else
             {

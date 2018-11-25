@@ -35,7 +35,6 @@ namespace LoadGeneratorDotnetCore
                 this.sbConnectionString.EntityPath = entityPath;
             }
             this.sendClient = new QueueClient(sbConnectionString, retryPolicy: RetryPolicy.NoRetry);
-            // this.sendClient = new QueueClient(sbConnectionString);
         }
 
         public override Task GenerateBatchAndSend(int batchSize, bool dryRun, CancellationToken cancellationToken, Func<byte[]> loadGenerator)
