@@ -139,7 +139,7 @@ namespace LoadGeneratorDotnetCore
                     try
                     {
                         // TODO: understand if exceptions propagate - looks like the counter is incremented regardless!
-                        await this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                        this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
                         Interlocked.Add(ref this.totalMessageCount, this.batchSize);
                     }
                     catch { } // swallow all exceptions
@@ -148,11 +148,14 @@ namespace LoadGeneratorDotnetCore
                 {
                     try
                     {
-                        await this.throttler.Perform(async () =>
+                        await this.throttler.Perform(() =>
                         {
-                            await this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                            this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                        }, cancellationToken)
+                        .ContinueWith((r) => 
+                        {
                             Interlocked.Add(ref this.totalMessageCount, this.batchSize);
-                        }, cancellationToken);
+                        }, TaskContinuationOptions.OnlyOnRanToCompletion);
                     }
                     catch { } // swallow all exceptions
                 }
