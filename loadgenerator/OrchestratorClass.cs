@@ -3,6 +3,8 @@ using System.Threading.Tasks;
 using System.Threading;
 using RateLimiter;
 using System.Text;
+using System.Collections;
+using System.Collections.Generic;
 
 namespace LoadGeneratorDotnetCore
 {
@@ -125,7 +127,10 @@ namespace LoadGeneratorDotnetCore
             // Keep running until:
             // a. shared cancellation token is triggered
             // b. we've emitted the required quantity of messages
-            // Keep running forever otherwise           
+            // Keep running forever otherwise    
+            const int maxConcurrency = 10000;
+            List<Task> tasks = new List<Task>();
+
             while (this.totalMessageCount < this.targetMessageCount ||
                     this.targetMessageCount <= 0)
             {
@@ -136,31 +141,48 @@ namespace LoadGeneratorDotnetCore
 
                 if (this.targetThroughput <= 0) // unconstrained
                 {
-                    try
+                    Task tsk = this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                    tsk.ContinueWith((r) =>
+                        {
+                            Interlocked.Add(ref this.totalMessageCount, this.batchSize);
+                        }, TaskContinuationOptions.OnlyOnRanToCompletion);
+                    tasks.Add(tsk);
+
+                    if (tasks.Count >= maxConcurrency)
                     {
-                        // TODO: understand if exceptions propagate - looks like the counter is incremented regardless!
-                        this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
-                        Interlocked.Add(ref this.totalMessageCount, this.batchSize);
+                        tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
                     }
-                    catch { } // swallow all exceptions
                 }
                 else // constrained version
                 {
+                    // TODO: introduce max tasks as well?
                     try
                     {
                         await this.throttler.Perform(() =>
                         {
-                            this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
-                        }, cancellationToken)
-                        .ContinueWith((r) => 
-                        {
-                            Interlocked.Add(ref this.totalMessageCount, this.batchSize);
-                        }, TaskContinuationOptions.OnlyOnRanToCompletion);
+                            Task tsk = this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                            tsk.ContinueWith((r) =>
+                                {
+                                    Interlocked.Add(ref this.totalMessageCount, this.batchSize);
+                                }, TaskContinuationOptions.OnlyOnRanToCompletion);
+                            tasks.Add(tsk);
+
+                            if (tasks.Count >= maxConcurrency)
+                            {
+                                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
+                            }
+
+                            // this.loadGeneratee.GenerateBatchAndSend(this.batchSize, this.dryRun, cancellationToken, this.DataGenerator);
+                            // Interlocked.Add(ref this.totalMessageCount, this.batchSize);
+                        }, cancellationToken);
+                        // .ContinueWith((r) =>
+                        // {
+                        //     Interlocked.Add(ref this.totalMessageCount, this.batchSize);
+                        // }, TaskContinuationOptions.OnlyOnRanToCompletion);
                     }
                     catch { } // swallow all exceptions
                 }
             }
-
             // Clean up
             lock (this.sharedLock)
             {
@@ -174,5 +196,4 @@ namespace LoadGeneratorDotnetCore
             this.cancellationTokenSource.Cancel();
         }
     }
-
 }
