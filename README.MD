@@ -21,19 +21,12 @@ Payload options:
 **Software prerequisites:**
 1. [.NET Core Runtime 2.1+](https://www.microsoft.com/net/download)
 2. (Optional) [Visual Studio Code](https://code.visualstudio.com/) and [.NET Core SDK 2.1+](https://www.microsoft.com/net/download) if you wish to build from source
+3. Docker
 
 ## Running this sample
-1. Download the [latest release](https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/releases/latest).
-2. Unpack, `cd` to the folder, run `dotnet loadgenerator.dll <parameters>`
+1. Download and extrack the [latest release](https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/releases/latest) or grab a docker image from [Docker Hub](https://hub.docker.com/r/iizotov/azure-sb-loadgenerator-dotnetcore/)
+2. Run `dotnet loadgenerator.dll <parameters>`
 
-Example:
-```bash
-wget https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/releases/download/2.0.3/azure-sb-loadgenerator-dotnetcore.tar.gz
-tar -xvzf azure-sb-loadgenerator-dotnetcore.tar.gz
-cd ./azure-sb-loadgenerator-dotnetcore/
-dotnet loadgenerator.dll <parameters>
-```
-   
 ### Command Line Parameters
 ```
   --service                 (Default: eh) Valid options: eh or sb for Azure
