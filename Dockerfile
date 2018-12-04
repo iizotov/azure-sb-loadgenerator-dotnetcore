@@ -2,6 +2,7 @@ FROM microsoft/dotnet:2.1-sdk AS build
 WORKDIR /app
 
 COPY *.csproj ./
+COPY *.sh ./
 COPY loadgenerator ./
 
 RUN dotnet restore 
@@ -12,4 +13,5 @@ FROM microsoft/dotnet:2.1-runtime AS runtime
 WORKDIR /app
 
 COPY --from=build /app/out .
-ENTRYPOINT [ "dotnet", "loadgenerator.dll" ]
+COPY --from=build /app/*.sh .
+CMD [ "/bin/sh", "./run.sh" ]
