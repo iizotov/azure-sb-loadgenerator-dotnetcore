@@ -21,9 +21,9 @@ Payload options:
 > Note: it is recommended to append `;TransportType=Amqp` to your connection string to enforce [AMQP](https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-amqp-dotnet) for better performance
 
 **Software prerequisites:**
-1. [.NET Core Runtime 2.1+](https://www.microsoft.com/net/download)
-2. (Optional) [Visual Studio Code](https://code.visualstudio.com/) and [.NET Core SDK 2.1+](https://www.microsoft.com/net/download) if you wish to build from source
-3. Docker
+1. [.NET Core Runtime 2.2+](https://www.microsoft.com/net/download)
+2. (Optional) [Visual Studio Code](https://code.visualstudio.com/) and [.NET Core SDK 2.2+](https://www.microsoft.com/net/download) if you wish to build from source
+3. (Optional) [Docker](https://docs.docker.com/install/)
 
 ## Running this sample
 1. Download and extrack the [latest release](https://github.com/iizotov/azure-sb-loadgenerator-dotnetcore/releases/latest) or grab a docker image from [Docker Hub](https://hub.docker.com/r/iizotov/azure-sb-loadgenerator-dotnetcore/)
@@ -70,8 +70,10 @@ Payload options:
 ### Example
 The following command will generate uncapped load in batches of 100 json messages, each message with a payload of 35 random characters. The code will run infitinely until a SIGTERM / SIGKILL is received or Escape is hit. Some parameters can be interactively adjusted in-flight
 
-```
-dotnet loadgenerator.dll --service "eh" --connectionstring "Endpoint=sb://eh-af-perftest.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=****;TransportType=Amqp;" --name "eh-ah-perftest-32"
+```bash
+dotnet loadgenerator.dll --service "eh" \
+    --connectionstring "Endpoint=sb://eh-af-perftest.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=****;TransportType=Amqp;" \
+    --name "eh-ah-perftest-32"
 
 -----INITIAL PARAMETERS-----
 Execution started: 21/11/2018 5:38:16 AM
