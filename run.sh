@@ -1,5 +1,18 @@
-#!/bin/sh
+#!/bin/bash
 
-[ "$INITIAL_SLEEP" ] && /bin/sleep $INITIAL_SLEEP
-dotnet loadgenerator.dll -c "$CONNECTION_STRING_1" -b $BATCH_1 -t $THROUGHPUT_1 --terminate-after $TERMINATE_AFTER_1 -j -s $SIZE_1 --service $SERVICE_1
-dotnet loadgenerator.dll -c "$CONNECTION_STRING_2" -b $BATCH_2 -t $THROUGHPUT_2 --terminate-after $TERMINATE_AFTER_2 -j -s $SIZE_2 --service $SERVICE_2
+var_expand() {
+  if [ -z "${1-}" ] || [ $# -ne 1 ]; then
+    printf 'var_expand: expected one argument\n' >&2;
+    return 1;
+  fi
+  eval printf '%s' "\"\${$1?}\""
+}
+
+for ((i=1;i<=$NUM_ITERATIONS;i++))
+do
+    [ "$INITIAL_SLEEP" ] && /bin/sleep $INITIAL_SLEEP
+
+    dotnet loadgenerator.dll -c "$(var_expand CONNECTION_STRING_$i)" -b $(var_expand BATCH_$i) \
+        -t $(var_expand THROUGHPUT_$i) --terminate-after $(var_expand TERMINATE_AFTER_$i) \
+        -j -s $(var_expand SIZE_$i) --service $(var_expand SERVICE_$i)
+done

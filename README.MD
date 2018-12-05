@@ -1,6 +1,8 @@
 # Multi-threaded load Generator for Azure Service Bus and Event Hubs
 > Note: the old unmaintained version is still available [here](https://github.com/iizotov/azure-sb-loadgenerator)
 
+[![Build status](https://dev.azure.com/igizotov/azure-sb-loadgenerator-dotnetcore/_apis/build/status/Build%20Docker%20Image)](https://dev.azure.com/igizotov/azure-sb-loadgenerator-dotnetcore/_build/latest?definitionId=9)
+
 This .NET Core app generates a random payload stream and pushes it into an Azure Service Bus Queue / Topic or an Azure Event Hub. In addition to controlling the app via command line arguments, the tool supports adjusting some parameters interactively:
 
 * Press Q or A to increase/decrease the throughput target in messages per second. Setting it to 0 turns off all rate limiting 
